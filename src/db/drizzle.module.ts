@@ -16,9 +16,11 @@ function createPool() {
     .replace(/[?&]+$/, '')
     .replace(/([?&])&+/g, '$1')
 
+  const useSsl = process.env.DATABASE_SSL === 'true'
+
   return new Pool({
     connectionString,
-    ssl: { rejectUnauthorized: true },
+    ssl: useSsl ? { rejectUnauthorized: true } : false,
   })
 }
 
