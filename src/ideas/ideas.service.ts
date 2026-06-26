@@ -8,12 +8,14 @@ import { and, asc, eq, sql } from 'drizzle-orm'
 import { DRIZZLE, type DrizzleDB } from '../db/drizzle.module'
 import { ideas, comments, user } from '../db/schema'
 import { TeamsService } from '../teams/teams.service'
+import { RealtimeGateway } from '../realtime/realtime.gateway'
 
 @Injectable()
 export class IdeasService {
   constructor(
     @Inject(DRIZZLE) private readonly db: DrizzleDB,
-    private readonly teams: TeamsService
+    private readonly teams: TeamsService,
+    private readonly realtime: RealtimeGateway
   ) {}
 
   private async getIdeaOrThrow(ideaId: number) {
@@ -52,6 +54,12 @@ export class IdeasService {
         position: nextPosition,
       })
       .returning()
+
+    this.realtime.emitTeam(teamId, 'idea:created', {
+      idea: created,
+      actorId: userId,
+    })
+    this.realtime.emitActivity(teamId, userId, `added "${created.title}"`, 'kanban')
     return created
   }
 
@@ -63,6 +71,19 @@ export class IdeasService {
       .set({ status, position, updatedAt: new Date() })
       .where(eq(ideas.id, ideaId))
       .returning()
+
+    this.realtime.emitTeam(idea.teamId, 'idea:updated', {
+      idea: updated,
+      actorId: userId,
+    })
+    if (idea.status !== status) {
+      this.realtime.emitActivity(
+        idea.teamId,
+        userId,
+        `moved "${updated.title}" to ${status}`,
+        'kanban',
+      )
+    }
     return updated
   }
 
@@ -74,6 +95,17 @@ export class IdeasService {
       .set({ status, updatedAt: new Date() })
       .where(eq(ideas.id, ideaId))
       .returning()
+
+    this.realtime.emitTeam(idea.teamId, 'idea:updated', {
+      idea: updated,
+      actorId: userId,
+    })
+    this.realtime.emitActivity(
+      idea.teamId,
+      userId,
+      `moved "${updated.title}" to ${status}`,
+      'kanban',
+    )
     return updated
   }
 
@@ -85,6 +117,12 @@ export class IdeasService {
       .set({ votes: (idea.votes || 0) + 1, updatedAt: new Date() })
       .where(eq(ideas.id, ideaId))
       .returning()
+
+    this.realtime.emitTeam(idea.teamId, 'idea:updated', {
+      idea: updated,
+      actorId: userId,
+    })
+    this.realtime.emitActivity(idea.teamId, userId, `voted on "${updated.title}"`, 'kanban')
     return updated
   }
 
@@ -96,6 +134,12 @@ export class IdeasService {
     await this.teams.assertMember(idea.teamId, userId)
     await this.db.delete(comments).where(eq(comments.ideaId, ideaId))
     await this.db.delete(ideas).where(eq(ideas.id, ideaId))
+
+    this.realtime.emitTeam(idea.teamId, 'idea:deleted', {
+      id: ideaId,
+      actorId: userId,
+    })
+    this.realtime.emitActivity(idea.teamId, userId, `deleted "${idea.title}"`, 'kanban')
     return { ok: true }
   }
 
@@ -126,6 +170,13 @@ export class IdeasService {
       .insert(comments)
       .values({ ideaId, userId, content })
       .returning()
+
+    this.realtime.emitTeam(idea.teamId, 'comment:created', {
+      comment: created,
+      ideaId,
+      actorId: userId,
+    })
+    this.realtime.emitActivity(idea.teamId, userId, `commented on "${idea.title}"`, 'kanban')
     return created
   }
 
@@ -138,6 +189,18 @@ export class IdeasService {
       throw new ForbiddenException('Cannot delete this comment')
     }
     await this.db.delete(comments).where(eq(comments.id, commentId))
+
+    const [idea] = await this.db
+      .select({ teamId: ideas.teamId })
+      .from(ideas)
+      .where(eq(ideas.id, comment.ideaId))
+    if (idea) {
+      this.realtime.emitTeam(idea.teamId, 'comment:deleted', {
+        id: commentId,
+        ideaId: comment.ideaId,
+        actorId: userId,
+      })
+    }
     return { ok: true }
   }
 }

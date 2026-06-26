@@ -8,8 +8,18 @@ import { asc, eq, sql } from 'drizzle-orm'
 import { DRIZZLE, type DrizzleDB } from '../db/drizzle.module'
 import { canvasElements, user } from '../db/schema'
 import { TeamsService } from '../teams/teams.service'
+import { RealtimeGateway } from '../realtime/realtime.gateway'
 import type { CreateElementDto } from './dto/create-element.dto'
 import type { UpdateElementDto } from './dto/update-element.dto'
+
+const ELEMENT_LABELS: Record<string, string> = {
+  sticky: 'a sticky note',
+  text: 'a text',
+  shape: 'a shape',
+  line: 'a line',
+  frame: 'a frame',
+  stamp: 'a stamp',
+}
 
 const DEFAULT_FRAMES = [
   { type: 'frame', content: 'Good', color: 'green', x: 40, y: 40, w: 460, h: 620 },
@@ -21,7 +31,8 @@ const DEFAULT_FRAMES = [
 export class CanvasService {
   constructor(
     @Inject(DRIZZLE) private readonly db: DrizzleDB,
-    private readonly teams: TeamsService
+    private readonly teams: TeamsService,
+    private readonly realtime: RealtimeGateway
   ) {}
 
   async listElements(teamId: number, userId: string) {
@@ -104,6 +115,17 @@ export class CanvasService {
         z: (maxZ?.value ?? 0) + 1,
       })
       .returning()
+
+    this.realtime.emitTeam(teamId, 'element:created', {
+      element: created,
+      actorId: userId,
+    })
+    this.realtime.emitActivity(
+      teamId,
+      userId,
+      `added ${ELEMENT_LABELS[created.type] ?? 'an element'}`,
+      'retro',
+    )
     return created
   }
 
@@ -130,6 +152,11 @@ export class CanvasService {
       .set(patch)
       .where(eq(canvasElements.id, elementId))
       .returning()
+
+    this.realtime.emitTeam(element.teamId, 'element:updated', {
+      element: updated,
+      actorId: userId,
+    })
     return updated
   }
 
@@ -146,6 +173,12 @@ export class CanvasService {
       .set({ votes: sql`${canvasElements.votes} + 1`, updatedAt: new Date() })
       .where(eq(canvasElements.id, elementId))
       .returning()
+
+    this.realtime.emitTeam(element.teamId, 'element:updated', {
+      element: updated,
+      actorId: userId,
+    })
+    this.realtime.emitActivity(element.teamId, userId, 'voted on an element', 'retro')
     return updated
   }
 
@@ -159,6 +192,12 @@ export class CanvasService {
       throw new ForbiddenException('Only the author can delete this element')
     }
     await this.db.delete(canvasElements).where(eq(canvasElements.id, elementId))
+
+    this.realtime.emitTeam(element.teamId, 'element:deleted', {
+      id: elementId,
+      actorId: userId,
+    })
+    this.realtime.emitActivity(element.teamId, userId, 'deleted an element', 'retro')
     return { ok: true }
   }
 }
