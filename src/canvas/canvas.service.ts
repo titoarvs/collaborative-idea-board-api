@@ -8,6 +8,7 @@ import { asc, eq, sql } from 'drizzle-orm'
 import { DRIZZLE, type DrizzleDB } from '../db/drizzle.module'
 import { canvasElements, user } from '../db/schema'
 import { TeamsService } from '../teams/teams.service'
+import { OrganizationsService } from '../organizations/organizations.service'
 import { RealtimeGateway } from '../realtime/realtime.gateway'
 import type { CreateElementDto } from './dto/create-element.dto'
 import type { UpdateElementDto } from './dto/update-element.dto'
@@ -32,11 +33,22 @@ export class CanvasService {
   constructor(
     @Inject(DRIZZLE) private readonly db: DrizzleDB,
     private readonly teams: TeamsService,
+    private readonly orgs: OrganizationsService,
     private readonly realtime: RealtimeGateway
   ) {}
 
-  async listElements(teamId: number, userId: string) {
+  /**
+   * Retro is a Pro feature. Verify membership, then that the board's
+   * organization is entitled to retro (throws PLAN_REQUIRED otherwise).
+   */
+  private async assertRetroAccess(teamId: number, userId: string) {
     await this.teams.assertMember(teamId, userId)
+    const orgId = await this.teams.getOrganizationId(teamId)
+    await this.orgs.assertRetroEnabled(orgId)
+  }
+
+  async listElements(teamId: number, userId: string) {
+    await this.assertRetroAccess(teamId, userId)
     return this.db
       .select({
         id: canvasElements.id,
@@ -63,7 +75,7 @@ export class CanvasService {
   }
 
   async seedDefaultFrames(teamId: number, userId: string) {
-    await this.teams.assertMember(teamId, userId)
+    await this.assertRetroAccess(teamId, userId)
 
     const existing = await this.db
       .select({ id: canvasElements.id })
@@ -91,7 +103,7 @@ export class CanvasService {
   }
 
   async create(teamId: number, userId: string, input: CreateElementDto) {
-    await this.teams.assertMember(teamId, userId)
+    await this.assertRetroAccess(teamId, userId)
 
     const [maxZ] = await this.db
       .select({ value: sql<number>`coalesce(max(${canvasElements.z}), 0)` })
@@ -135,7 +147,7 @@ export class CanvasService {
       .from(canvasElements)
       .where(eq(canvasElements.id, elementId))
     if (!element) throw new NotFoundException('Element not found')
-    await this.teams.assertMember(element.teamId, userId)
+    await this.assertRetroAccess(element.teamId, userId)
 
     const patch: Record<string, unknown> = { updatedAt: new Date() }
     if (input.content !== undefined) patch.content = input.content
@@ -166,7 +178,7 @@ export class CanvasService {
       .from(canvasElements)
       .where(eq(canvasElements.id, elementId))
     if (!element) throw new NotFoundException('Element not found')
-    await this.teams.assertMember(element.teamId, userId)
+    await this.assertRetroAccess(element.teamId, userId)
 
     const [updated] = await this.db
       .update(canvasElements)
@@ -188,6 +200,7 @@ export class CanvasService {
       .from(canvasElements)
       .where(eq(canvasElements.id, elementId))
     if (!element) throw new NotFoundException('Element not found')
+    await this.assertRetroAccess(element.teamId, userId)
     if (element.userId !== userId) {
       throw new ForbiddenException('Only the author can delete this element')
     }

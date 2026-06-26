@@ -8,6 +8,9 @@ import { UsersModule } from './users/users.module'
 import { TeamsModule } from './teams/teams.module'
 import { IdeasModule } from './ideas/ideas.module'
 import { CanvasModule } from './canvas/canvas.module'
+import { OrganizationsModule } from './organizations/organizations.module'
+import { BillingModule } from './billing/billing.module'
+import { AdminModule } from './admin/admin.module'
 
 @Module({
   imports: [
@@ -15,9 +18,12 @@ import { CanvasModule } from './canvas/canvas.module'
     DrizzleModule,
     UsersModule,
     AuthModule,
+    OrganizationsModule,
     TeamsModule,
     IdeasModule,
     CanvasModule,
+    BillingModule,
+    AdminModule,
   ],
   providers: [
     {

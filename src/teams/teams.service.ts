@@ -7,13 +7,65 @@ import {
 import { and, eq } from 'drizzle-orm'
 import { DRIZZLE, type DrizzleDB } from '../db/drizzle.module'
 import { teams, teamMembers, user } from '../db/schema'
+import { OrganizationsService } from '../organizations/organizations.service'
 
 @Injectable()
 export class TeamsService {
-  constructor(@Inject(DRIZZLE) private readonly db: DrizzleDB) {}
+  constructor(
+    @Inject(DRIZZLE) private readonly db: DrizzleDB,
+    private readonly orgs: OrganizationsService,
+  ) {}
 
   private generateInviteCode() {
     return Math.random().toString(36).substring(2, 8).toUpperCase()
+  }
+
+  /** The organization a board belongs to, or null for pre-tenancy boards. */
+  async getOrganizationId(teamId: number): Promise<number | null> {
+    const [row] = await this.db
+      .select({ organizationId: teams.organizationId })
+      .from(teams)
+      .where(eq(teams.id, teamId))
+    return row?.organizationId ?? null
+  }
+
+  /** Boards belonging to an organization the caller is a member of. */
+  async listByOrg(organizationId: number, userId: string) {
+    await this.orgs.assertMember(organizationId, userId)
+    return this.db
+      .select()
+      .from(teams)
+      .where(eq(teams.organizationId, organizationId))
+  }
+
+  /** Create a board within an org, enforcing the plan's board limit. */
+  async createInOrg(
+    organizationId: number,
+    userId: string,
+    name: string,
+    description?: string,
+  ) {
+    await this.orgs.assertMember(organizationId, userId)
+    await this.orgs.assertCanCreateBoard(organizationId)
+
+    const [team] = await this.db
+      .insert(teams)
+      .values({
+        organizationId,
+        userId,
+        name,
+        description,
+        inviteCode: this.generateInviteCode(),
+      })
+      .returning()
+
+    await this.db.insert(teamMembers).values({
+      teamId: team.id,
+      userId,
+      role: 'admin',
+    })
+
+    return team
   }
 
   async assertMember(teamId: number, userId: string) {

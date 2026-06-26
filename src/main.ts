@@ -5,7 +5,8 @@ import cookieParser from 'cookie-parser'
 import { AppModule } from './app.module'
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule)
+  // `rawBody` exposes req.rawBody for verifying billing webhook signatures.
+  const app = await NestFactory.create(AppModule, { rawBody: true })
 
   app.use(cookieParser())
   app.useGlobalPipes(

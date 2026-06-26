@@ -9,6 +9,7 @@ export interface PublicUser {
   name: string
   email: string
   image: string | null
+  role: string
 }
 
 @Injectable()
@@ -47,7 +48,14 @@ export class UsersService {
     name: string
     email: string
     image: string | null
+    role?: string
   }): PublicUser {
-    return { id: row.id, name: row.name, email: row.email, image: row.image }
+    return {
+      id: row.id,
+      name: row.name,
+      email: row.email,
+      image: row.image,
+      role: row.role ?? 'user',
+    }
   }
 }

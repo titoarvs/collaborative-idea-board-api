@@ -2,6 +2,7 @@ import { Test } from '@nestjs/testing'
 import { ForbiddenException } from '@nestjs/common'
 import { TeamsService } from './teams.service'
 import { DRIZZLE } from '../db/drizzle.module'
+import { OrganizationsService } from '../organizations/organizations.service'
 
 describe('TeamsService', () => {
   let service: TeamsService
@@ -12,7 +13,11 @@ describe('TeamsService', () => {
 
   beforeEach(async () => {
     const moduleRef = await Test.createTestingModule({
-      providers: [TeamsService, { provide: DRIZZLE, useValue: db }],
+      providers: [
+        TeamsService,
+        { provide: DRIZZLE, useValue: db },
+        { provide: OrganizationsService, useValue: {} },
+      ],
     }).compile()
     service = moduleRef.get(TeamsService)
     jest.clearAllMocks()

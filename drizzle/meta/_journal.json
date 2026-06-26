@@ -36,6 +36,20 @@
       "when": 1782455550560,
       "tag": "0004_reflective_zemo",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1782481977590,
+      "tag": "0005_flawless_thunderball",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1782482790683,
+      "tag": "0006_odd_maggott",
+      "breakpoints": true
     }
   ]
 }

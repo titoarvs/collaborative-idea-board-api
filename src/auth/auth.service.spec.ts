@@ -4,6 +4,7 @@ import { JwtService } from '@nestjs/jwt'
 import { ConfigService } from '@nestjs/config'
 import { AuthService } from './auth.service'
 import { UsersService } from '../users/users.service'
+import { OrganizationsService } from '../organizations/organizations.service'
 import { DRIZZLE } from '../db/drizzle.module'
 
 describe('AuthService', () => {
@@ -17,6 +18,7 @@ describe('AuthService', () => {
   const jwt = { signAsync: jest.fn().mockResolvedValue('access.jwt') }
   const config = { get: jest.fn().mockReturnValue('900') }
   const db = { insert: jest.fn(), delete: jest.fn(), select: jest.fn() }
+  const organizations = { create: jest.fn() }
 
   beforeEach(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -26,6 +28,7 @@ describe('AuthService', () => {
         { provide: JwtService, useValue: jwt },
         { provide: ConfigService, useValue: config },
         { provide: DRIZZLE, useValue: db },
+        { provide: OrganizationsService, useValue: organizations },
       ],
     }).compile()
     service = moduleRef.get(AuthService)

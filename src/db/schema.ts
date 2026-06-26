@@ -11,6 +11,8 @@ export const user = pgTable('user', {
   emailVerified: boolean('emailVerified').notNull().default(false),
   image: text('image'),
   passwordHash: text('passwordHash'),
+  // Platform-level role: 'system_admin' grants access to the admin console.
+  role: text('role').notNull().default('user'),
   createdAt: timestamp('createdAt').notNull().defaultNow(),
   updatedAt: timestamp('updatedAt').notNull().defaultNow(),
 })
@@ -63,10 +65,68 @@ export const refreshTokens = pgTable('refreshTokens', {
   createdAt: timestamp('createdAt').notNull().defaultNow(),
 })
 
+// --- Tenancy / billing tables ---------------------------------------------
+
+export const organizations = pgTable('organizations', {
+  id: serial('id').primaryKey(),
+  name: text('name').notNull(),
+  ownerId: text('ownerId').notNull(),
+  // 'free' | 'pro'. During a trial the plan is 'pro' with status 'trialing'.
+  plan: text('plan').notNull().default('pro'),
+  // 'trialing' | 'active' | 'past_due' | 'canceled' | 'expired'
+  status: text('status').notNull().default('trialing'),
+  trialEndsAt: timestamp('trialEndsAt'),
+  currentPeriodEnd: timestamp('currentPeriodEnd'),
+  cancelAtPeriodEnd: boolean('cancelAtPeriodEnd').notNull().default(false),
+  billingProvider: text('billingProvider'),
+  billingCustomerId: text('billingCustomerId'),
+  billingSubscriptionId: text('billingSubscriptionId'),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+  updatedAt: timestamp('updatedAt').notNull().defaultNow(),
+})
+
+export const organizationMembers = pgTable('organizationMembers', {
+  id: serial('id').primaryKey(),
+  organizationId: integer('organizationId').notNull(),
+  userId: text('userId').notNull(),
+  // 'owner' | 'admin' | 'member'
+  role: text('role').notNull().default('member'),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+})
+
+export const organizationInvites = pgTable('organizationInvites', {
+  id: serial('id').primaryKey(),
+  organizationId: integer('organizationId').notNull(),
+  email: text('email').notNull(),
+  role: text('role').notNull().default('member'),
+  token: text('token').notNull().unique(),
+  invitedBy: text('invitedBy'),
+  acceptedAt: timestamp('acceptedAt'),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+})
+
+// Platform-wide billing configuration, managed by system admins. A single row
+// (id = 1). Secret columns store AES-256-GCM ciphertext, never plaintext.
+export const billingSettings = pgTable('billingSettings', {
+  id: integer('id').primaryKey().default(1),
+  // 'dev' | 'stripe' | 'paymongo' | 'none'
+  activeProvider: text('activeProvider').notNull().default('dev'),
+  stripeSecretKey: text('stripeSecretKey'),
+  stripePricePro: text('stripePricePro'),
+  stripeWebhookSecret: text('stripeWebhookSecret'),
+  paymongoSecretKey: text('paymongoSecretKey'),
+  paymongoProAmount: integer('paymongoProAmount'),
+  paymongoWebhookSecret: text('paymongoWebhookSecret'),
+  updatedBy: text('updatedBy'),
+  updatedAt: timestamp('updatedAt').notNull().defaultNow(),
+})
+
 // --- App tables ------------------------------------------------------------
 
 export const teams = pgTable('teams', {
   id: serial('id').primaryKey(),
+  // Nullable so pre-tenancy rows remain valid; new boards always set this.
+  organizationId: integer('organizationId'),
   userId: text('userId').notNull(),
   name: text('name').notNull(),
   description: text('description'),

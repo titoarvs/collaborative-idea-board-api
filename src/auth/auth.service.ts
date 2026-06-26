@@ -12,6 +12,7 @@ import { and, eq, lt } from 'drizzle-orm'
 import { DRIZZLE, type DrizzleDB } from '../db/drizzle.module'
 import { refreshTokens } from '../db/schema'
 import { UsersService, type PublicUser } from '../users/users.service'
+import { OrganizationsService } from '../organizations/organizations.service'
 import type { RegisterDto } from './dto/register.dto'
 import type { LoginDto } from './dto/login.dto'
 
@@ -32,7 +33,8 @@ export class AuthService {
     @Inject(DRIZZLE) private readonly db: DrizzleDB,
     private readonly users: UsersService,
     private readonly jwt: JwtService,
-    private readonly config: ConfigService
+    private readonly config: ConfigService,
+    private readonly organizations: OrganizationsService
   ) {}
 
   private get accessTtl() {
@@ -52,6 +54,11 @@ export class AuthService {
       email: dto.email,
       passwordHash,
     })
+
+    // Provision a default organization (30-day Pro trial) so the user lands in
+    // a usable workspace instead of an empty dashboard.
+    const orgName = `${dto.name.split(' ')[0] || dto.name}'s Organization`
+    await this.organizations.create(created.id, orgName)
 
     const tokens = await this.issueTokens(created.id, created.email)
     return { user: this.users.toPublic(created), tokens }
