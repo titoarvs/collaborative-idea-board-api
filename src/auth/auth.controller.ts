@@ -25,14 +25,21 @@ export class AuthController {
     private readonly config: ConfigService
   ) {}
 
-  private setCookies(res: Response, tokens: IssuedTokens) {
+  private cookieOptions() {
     const secure = this.config.get('COOKIE_SECURE') === 'true'
-    const common = {
+    // Cross-site cookies (frontend on a different domain than the API) require
+    // SameSite=None, which browsers only accept on Secure cookies. Locally
+    // (secure=false) fall back to Lax so cookies still work over http.
+    return {
       httpOnly: true,
-      sameSite: 'lax' as const,
+      sameSite: (secure ? 'none' : 'lax') as 'none' | 'lax',
       secure,
       path: '/',
     }
+  }
+
+  private setCookies(res: Response, tokens: IssuedTokens) {
+    const common = this.cookieOptions()
     res.cookie('access_token', tokens.accessToken, {
       ...common,
       maxAge: tokens.accessMaxAge,
@@ -44,8 +51,9 @@ export class AuthController {
   }
 
   private clearCookies(res: Response) {
-    res.clearCookie('access_token', { path: '/' })
-    res.clearCookie('refresh_token', { path: '/' })
+    const { httpOnly, sameSite, secure, path } = this.cookieOptions()
+    res.clearCookie('access_token', { httpOnly, sameSite, secure, path })
+    res.clearCookie('refresh_token', { httpOnly, sameSite, secure, path })
   }
 
   @Public()
